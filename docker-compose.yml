@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.api
+    container_name: complaint_api
+    env_file: .env
+    environment:
+      - DATABASE_URL=sqlite:////app/data/complaints.db
+      - MODEL_DIR=/app/models
+      - MLFLOW_TRACKING_URI=/app/mlruns
+    volumes:
+      - complaint_data:/app/data
+      - complaint_models:/app/models
+      - complaint_mlruns:/app/mlruns
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.frontend
+    container_name: complaint_frontend
+    environment:
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: complaint_nginx
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - frontend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  complaint_data:
+  complaint_models:
+  complaint_mlruns:

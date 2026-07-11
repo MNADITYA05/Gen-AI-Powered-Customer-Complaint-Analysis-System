@@ -1,0 +1,240 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Complaint category definitions
+# Add new categories here without touching source code.
+# ─────────────────────────────────────────────────────────────────────────────
+
+categories:
+
+  ATM_FAILURE:
+    display_name: "ATM Failure"
+    severities: [low, medium, high, critical]
+    emotions:
+      frustrated: ["extremely frustrated", "really frustrated", "very frustrated", "incredibly frustrated"]
+      angry:      ["absolutely furious", "really angry", "very angry", "extremely upset", "livid"]
+      disappointed: ["very disappointed", "extremely disappointed", "really disappointed"]
+      worried:    ["very concerned", "extremely worried", "really worried", "very anxious"]
+      stressed:   ["very stressed", "extremely stressed", "under a lot of stress"]
+    emotion_starts:
+      frustrated: ["I'm extremely frustrated that", "I'm really frustrated because", "I'm very frustrated that"]
+      angry:      ["I'm absolutely furious that", "I'm really angry that", "I'm very upset that"]
+      disappointed: ["I'm very disappointed that", "I'm extremely disappointed because"]
+      worried:    ["I'm very concerned that", "I'm really worried because"]
+      stressed:   ["I'm very stressed because", "I'm under a lot of stress due to the fact that"]
+    severity_descriptions:
+      low:      ["a minor inconvenience", "a small issue", "a minor problem"]
+      medium:   ["a significant problem", "a real concern", "a noticeable issue"]
+      high:     ["a serious problem", "a major issue", "a severe disruption"]
+      critical: ["a critical emergency", "an unacceptable situation", "a complete failure of service"]
+    templates:
+      - "I am {emotion} about what happened at the {location} ATM {time_ref}. I was trying to {action} but {failure_description}. {impact_statement} {resolution_request}"
+      - "{emotion_start} I went to the ATM at {location} {time_ref} to {action}. {failure_description} {impact_statement} This is {severity_desc} and needs immediate attention. {resolution_request}"
+      - "This is {severity_desc}! The ATM at {location} {failure_description} when I tried to {action} {time_ref}. {impact_statement} {emotion_statement} {resolution_request}"
+      - "I need to report a serious problem with your ATM at {location}. {time_ref} I attempted to {action} but {failure_description}. {impact_statement} {emotion_statement} {resolution_request}"
+    locations:
+      - "your Main Street branch"
+      - "the downtown office"
+      - "your mall location"
+      - "the airport branch"
+      - "your grocery store ATM"
+      - "the university campus ATM"
+      - "your nearest branch"
+      - "the parking garage ATM"
+    time_refs:
+      - "yesterday"
+      - "this morning"
+      - "last night"
+      - "earlier today"
+      - "two days ago"
+      - "on Saturday afternoon"
+      - "during my lunch break"
+    actions:
+      - "withdraw cash"
+      - "check my balance"
+      - "make a deposit"
+      - "transfer funds"
+      - "get a mini statement"
+    failure_descriptions:
+      - "the machine swallowed my card and wouldn't return it"
+      - "it dispensed the wrong amount of cash"
+      - "the screen froze and became completely unresponsive"
+      - "it showed transaction approved but dispensed no cash"
+      - "the keypad stopped working mid-transaction"
+      - "it displayed an out-of-service message after taking my card"
+      - "the machine restarted itself during my transaction"
+      - "it kept asking me to re-enter my PIN without proceeding"
+      - "the receipt printer jammed and I have no proof of transaction"
+    impact_statements:
+      - "I was left without access to my money for the entire day."
+      - "I had to cancel important plans because of this."
+      - "This caused me significant financial inconvenience."
+      - "I missed a payment deadline because of this failure."
+      - "I was stranded without cash in an emergency situation."
+      - "My card has still not been returned and I cannot access my account."
+    resolution_requests:
+      - "I demand immediate resolution and appropriate compensation."
+      - "Please fix this issue and refund any lost funds immediately."
+      - "I expect a full investigation and prompt resolution within 24 hours."
+      - "This must be addressed today and I expect a written response."
+      - "Please return my card and reimburse me for any charges incurred."
+    specific_issues:
+      - card_stuck
+      - cash_not_dispensed
+      - screen_frozen
+      - receipt_not_printed
+      - keypad_unresponsive
+      - out_of_service
+      - network_error
+      - wrong_amount_dispensed
+      - card_not_returned
+
+  FRAUD_DETECTION:
+    display_name: "Fraud Detection"
+    severities: [medium, high, critical]
+    emotions:
+      panicked:  ["absolutely panicked", "in a complete panic", "terrified and panicked"]
+      angry:     ["furious", "absolutely enraged", "extremely angry"]
+      scared:    ["really scared", "frightened", "very alarmed"]
+      worried:   ["deeply worried", "extremely concerned", "very anxious about my security"]
+    emotion_starts:
+      panicked: ["I'm in a complete panic because", "I'm absolutely panicked that", "I'm terrified because"]
+      angry:    ["I'm absolutely furious about", "I'm enraged by", "I'm extremely angry that"]
+      scared:   ["I'm really scared because", "I'm frightened that", "I'm very alarmed by"]
+      worried:  ["I'm deeply worried about", "I'm extremely concerned because", "I'm very anxious because"]
+    severity_descriptions:
+      medium:   ["a significant security concern", "a serious problem that requires attention"]
+      high:     ["a major security breach", "a severe financial threat to my account"]
+      critical: ["a critical security emergency", "an immediate financial crisis requiring urgent action"]
+    templates:
+      - "I discovered {fraud_discovery} {time_ref}. {fraud_details} {impact_statement} {emotion_statement} {resolution_request}"
+      - "{emotion_start} there have been unauthorized transactions on my account. {fraud_details} {impact_statement} {resolution_request}"
+      - "This is {severity_desc}. I found {fraud_discovery} {time_ref} and I'm {emotion}. {fraud_details} {resolution_request}"
+      - "I am reporting {fraud_type} on my account. {fraud_discovery} {time_ref}. {fraud_details} {impact_statement} {resolution_request}"
+    fraud_discoveries:
+      - "unauthorized charges on my account"
+      - "suspicious transactions I did not authorize"
+      - "my card was used without my knowledge"
+      - "someone accessed my account from an unknown device"
+      - "multiple unknown transactions draining my account"
+    time_refs:
+      - "this morning when I checked my statement"
+      - "yesterday evening"
+      - "earlier today"
+      - "just now via my transaction alert"
+      - "while reviewing my monthly statement"
+    fraud_details:
+      - "There were multiple transactions I did not authorize, totaling hundreds of dollars."
+      - "Someone used my card details at locations I have never visited."
+      - "I received real-time alerts for transactions I definitely did not make."
+      - "My account shows purchases from unknown online merchants I've never heard of."
+      - "My login credentials appear to have been compromised and my account accessed remotely."
+    impact_statements:
+      - "My account has been compromised and I cannot access my remaining funds."
+      - "I am unable to pay my bills due to these fraudulent charges wiping out my balance."
+      - "This has caused me significant financial loss and enormous emotional distress."
+      - "I am at risk of missing rent and utility payments due to this fraud."
+    resolution_requests:
+      - "I demand an immediate freeze on my account and a full fraud investigation."
+      - "Please reverse all fraudulent charges and secure my account immediately."
+      - "I need emergency assistance to secure my account and recover my lost funds."
+      - "I want all unauthorized transactions reversed and a new card issued today."
+    fraud_types:
+      - unauthorized_transaction
+      - card_skimming
+      - account_takeover
+      - phishing_attempt
+      - suspicious_login
+      - identity_theft
+    specific_issues:
+      - unauthorized_transaction
+      - card_skimming
+      - account_takeover
+      - phishing_attempt
+      - suspicious_login
+      - identity_theft
+
+  UX_ISSUES:
+    display_name: "UX / Digital Banking Issues"
+    severities: [low, medium, high]
+    emotions:
+      frustrated:  ["extremely frustrated", "very frustrated", "incredibly frustrated"]
+      confused:    ["very confused", "completely baffled", "totally confused"]
+      disappointed: ["very disappointed", "really let down", "extremely disappointed"]
+      annoyed:     ["really annoyed", "very annoyed", "extremely annoyed"]
+    emotion_starts:
+      frustrated:  ["I'm extremely frustrated with", "I'm very frustrated by", "I'm incredibly frustrated with"]
+      confused:    ["I'm completely confused by", "I'm very confused about", "I'm totally baffled by"]
+      disappointed: ["I'm very disappointed with", "I'm really let down by", "I'm extremely disappointed in"]
+      annoyed:     ["I'm really annoyed with", "I'm very annoyed by"]
+    severity_descriptions:
+      low:    ["a minor inconvenience", "a small usability issue"]
+      medium: ["a significant usability problem", "a real barrier to everyday banking"]
+      high:   ["a serious accessibility failure", "a major technical breakdown affecting all users"]
+    templates:
+      - "I am {emotion} with your {platform} {time_ref}. I was trying to {task} but {problem_description}. {impact_statement} {resolution_request}"
+      - "{emotion_start} your {platform}. {time_ref} I attempted to {task} but encountered {specific_issue}. {problem_description} {impact_statement} {resolution_request}"
+      - "Your {platform} is failing its users. {problem_description} {time_ref} when I tried to {task}. {comparison} {emotion_statement} {resolution_request}"
+      - "I need to report serious {specific_issue} on your {platform}. {time_ref} {problem_description} {impact_statement} {resolution_request}"
+    platforms:
+      - "mobile banking app"
+      - "online banking website"
+      - "digital banking portal"
+      - "banking application"
+      - "internet banking platform"
+    problem_descriptions:
+      - "the app crashed repeatedly without any warning or error message"
+      - "the interface is so confusing I cannot locate basic features"
+      - "the page took over three minutes to load and then timed out"
+      - "the login process failed multiple times despite correct credentials"
+      - "the navigation makes no logical sense and I got completely lost"
+      - "the app logged me out mid-transaction without saving my progress"
+      - "error messages appeared with no explanation of what went wrong"
+    time_refs:
+      - "this morning"
+      - "yesterday"
+      - "for the past week consistently"
+      - "multiple times this week"
+      - "every time I try to use it"
+    tasks:
+      - "transfer money to another account"
+      - "pay my credit card bill"
+      - "check my full transaction history"
+      - "update my personal contact information"
+      - "set up automatic payments"
+      - "view my account statements"
+      - "apply for an overdraft"
+    specific_issues:
+      - confusing_interface
+      - slow_loading
+      - accessibility_issues
+      - mobile_app_crashes
+      - unclear_instructions
+      - poor_navigation
+    impact_statements:
+      - "I was unable to complete an important financial transaction as a result."
+      - "I had to call customer service just to do something that should be simple."
+      - "This forced me to visit a branch in person, wasting significant time."
+      - "I nearly missed a payment deadline because the app would not function."
+    comparisons:
+      - "Other banks' apps work perfectly fine without these issues."
+      - "I have never experienced these problems with other financial institutions."
+      - "Competitor apps are far superior in design and reliability."
+      - "My previous bank's platform never had anything close to this problem."
+    resolution_requests:
+      - "Please fix these issues urgently — they are unacceptable for a banking platform."
+      - "I expect a proper response and confirmed resolution within 48 hours."
+      - "This needs to be treated as a priority fix for all affected customers."
+      - "I want confirmation that this has been escalated to your development team."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Demographics and metadata options shared across all categories
+# ─────────────────────────────────────────────────────────────────────────────
+
+demographics:
+  age_groups:         ["18-30", "31-50", "51-65", "65+"]
+  tech_savviness:     [low, medium, high]
+  banking_experience: [novice, intermediate, expert]
+
+metadata:
+  channels:      [phone, email, chat, branch, mobile_app, website]
+  account_types: [checking, savings, credit, business, investment]

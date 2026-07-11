@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment
+.env
+
+# Runtime data (user-generated, not versioned)
+data/exports/
+data/uploads/
+data/*.csv
+data/*.json
+data/complaints.db
+
+# ML artefacts
+models/
+mlruns/
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# macOS
+.DS_Store
+
+# Docker volumes
+*.sock
+mlruns.db
+flutter_frontend/
+infra/
