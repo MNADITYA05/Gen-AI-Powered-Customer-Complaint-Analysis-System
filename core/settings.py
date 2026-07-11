@@ -31,8 +31,9 @@ class Settings(BaseSettings):
     # ML
     model_dir: str = "models"
 
-    # Database
-    database_url: str = "sqlite:///./data/complaints.db"
+    # Database — MongoDB Atlas (or local mongod)
+    mongodb_url: str = "mongodb://localhost:27017"
+    mongodb_db_name: str = "complaint_analysis"
 
     # MLflow
     mlflow_tracking_uri: str = "sqlite:///./mlruns.db"

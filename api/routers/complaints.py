@@ -17,7 +17,6 @@ from typing import Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy.orm import Session
 
 from api.dependencies import get_classifier, require_admin, require_agent
 from core.rag_engine import get_rag_engine
@@ -31,7 +30,7 @@ from api.schemas.complaint import (
     StatusUpdateRequest,
 )
 from core.database import get_db
-from core.db_models import Complaint, ComplaintNote, User
+from core.db_models import ComplaintDoc, ComplaintNoteDoc, UserDoc, new_complaint, new_complaint_note
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +42,9 @@ router = APIRouter(prefix="/api/v1/complaints", tags=["complaints"])
 @router.post("/upload", status_code=201)
 def upload_complaints(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    db=Depends(get_db),
     classifier=Depends(get_classifier),
-    current_user: User = Depends(require_agent),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """
     Upload a CSV of real complaints.
@@ -71,6 +70,7 @@ def upload_complaints(
 
     stored = 0
     errors = 0
+    docs = []
     for _, row in df.iterrows():
         text = str(row["complaint_text"]).strip()
         if len(text) < 10:
@@ -91,7 +91,7 @@ def upload_complaints(
                 except Exception:
                     pass
 
-        complaint = Complaint(
+        doc = new_complaint(
             complaint_text    = text,
             category          = category or "UNKNOWN",
             severity          = severity or "medium",
@@ -106,10 +106,12 @@ def upload_complaints(
             character_count   = len(text),
             generation_method = "csv_upload",
         )
-        db.add(complaint)
+        docs.append(doc)
         stored += 1
 
-    db.commit()
+    if docs:
+        db.complaints.insert_many(docs)
+
     return {"stored": stored, "skipped": errors, "total_rows": len(df)}
 
 
@@ -118,8 +120,9 @@ def upload_complaints(
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze_complaint(
     req: AnalyzeRequest,
+    db=Depends(get_db),
     classifier=Depends(get_classifier),
-    current_user: User = Depends(require_agent),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """Classify a single complaint text using the RoBERTa multi-task model."""
     if not getattr(classifier, "is_trained", None) and not getattr(classifier, "is_loaded", None):
@@ -129,8 +132,7 @@ def analyze_complaint(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-    db = next(get_db())
-    complaint = Complaint(
+    doc = new_complaint(
         complaint_text    = req.text,
         category          = result["category"],
         severity          = result["severity"],
@@ -141,9 +143,7 @@ def analyze_complaint(
         character_count   = len(req.text),
         generation_method = "api_submission",
     )
-    db.add(complaint)
-    db.commit()
-    db.close()
+    db.complaints.insert_one(doc)
 
     return AnalyzeResponse(
         category   = result["category"],
@@ -157,7 +157,7 @@ def analyze_complaint(
 def batch_analyze(
     req: BatchAnalyzeRequest,
     classifier=Depends(get_classifier),
-    current_user: User = Depends(require_agent),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """Classify up to 500 complaints in a single call."""
     if not getattr(classifier, "is_trained", None) and not getattr(classifier, "is_loaded", None):
@@ -181,39 +181,38 @@ def list_complaints(
     category: Optional[str] = Query(default=None),
     severity: Optional[str] = Query(default=None),
     status:   Optional[str] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_agent),
+    db=Depends(get_db),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """Return stored complaints with optional filters."""
-    query = db.query(Complaint)
+    filt: dict = {}
     if category:
-        query = query.filter(Complaint.category == category)
+        filt["category"] = category
     if severity:
-        query = query.filter(Complaint.severity == severity)
+        filt["severity"] = severity
     if status:
-        query = query.filter(Complaint.status == status)
+        filt["status"] = status
 
-    total = query.count()
-    rows  = (
-        query
-        .order_by(Complaint.created_at.desc())
-        .offset((page - 1) * limit)
+    total = db.complaints.count_documents(filt)
+    rows  = list(
+        db.complaints.find(filt)
+        .sort("created_at", -1)
+        .skip((page - 1) * limit)
         .limit(limit)
-        .all()
     )
 
     return ComplaintListResponse(
         items=[
             {
-                "id":                r.id,
-                "complaint_text":    r.complaint_text,
-                "category":          r.category,
-                "severity":          r.severity,
-                "emotion":           r.emotion,
-                "status":            r.status or "open",
-                "source":            r.source or "unknown",
-                "generation_method": r.generation_method or "unknown",
-                "created_at":        r.created_at,
+                "id":                r["_id"],
+                "complaint_text":    r.get("complaint_text", ""),
+                "category":          r.get("category", ""),
+                "severity":          r.get("severity", ""),
+                "emotion":           r.get("emotion", ""),
+                "status":            r.get("status", "open"),
+                "source":            r.get("source", "unknown"),
+                "generation_method": r.get("generation_method", "unknown"),
+                "created_at":        r.get("created_at"),
             }
             for r in rows
         ],
@@ -229,31 +228,35 @@ def list_complaints(
 def update_status(
     complaint_id: str,
     req: StatusUpdateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_agent),
+    db=Depends(get_db),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """Update a complaint's status, assignee, or add a resolution note."""
-    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
-    if not complaint:
+    doc = db.complaints.find_one({"_id": complaint_id})
+    if not doc:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
+    updates: dict = {}
     if req.status:
-        complaint.status = req.status
+        updates["status"] = req.status
     if req.assignee_id:
-        complaint.assignee_id = req.assignee_id
+        updates["assignee_id"] = req.assignee_id
     if req.resolution_notes:
-        complaint.resolution_notes = req.resolution_notes
+        updates["resolution_notes"] = req.resolution_notes
+
+    if updates:
+        db.complaints.update_one({"_id": complaint_id}, {"$set": updates})
 
     if req.note:
-        note = ComplaintNote(
+        note_doc = new_complaint_note(
             complaint_id = complaint_id,
             user_id      = current_user.id,
             content      = req.note,
         )
-        db.add(note)
+        db.complaint_notes.insert_one(note_doc)
 
-    db.commit()
-    return {"id": complaint_id, "status": complaint.status}
+    new_status = updates.get("status", doc.get("status", "open"))
+    return {"id": complaint_id, "status": new_status}
 
 
 # ── Similar Cases (RAG) ───────────────────────────────────────────────────────
@@ -262,15 +265,15 @@ def update_status(
 def similar_complaints(
     complaint_id: str,
     k: int = Query(default=5, ge=1, le=10),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_agent),
+    db=Depends(get_db),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """
     Return the k most semantically similar complaints using the local RAG engine.
     Results are ranked by cosine similarity of sentence-transformer embeddings.
     """
-    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
-    if not complaint:
+    doc = db.complaints.find_one({"_id": complaint_id})
+    if not doc:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
     engine = get_rag_engine()
@@ -281,7 +284,7 @@ def similar_complaints(
             raise HTTPException(status_code=503, detail=str(exc))
 
     results = engine.find_similar(
-        complaint.complaint_text, k=k, exclude_id=complaint_id
+        doc["complaint_text"], k=k, exclude_id=complaint_id
     )
     return {
         "complaint_id": complaint_id,
@@ -292,8 +295,8 @@ def similar_complaints(
 
 @router.post("/rag/rebuild")
 def rebuild_rag_index(
-    db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    db=Depends(get_db),
+    _admin: UserDoc = Depends(require_admin),
 ):
     """Admin: rebuild the RAG similarity index from all DB complaints."""
     engine = get_rag_engine()
@@ -309,14 +312,12 @@ def rebuild_rag_index(
 @router.get("/{complaint_id}/notes")
 def get_notes(
     complaint_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_agent),
+    db=Depends(get_db),
+    current_user: UserDoc = Depends(require_agent),
 ):
     """Return all notes for a complaint."""
-    notes = (
-        db.query(ComplaintNote)
-        .filter(ComplaintNote.complaint_id == complaint_id)
-        .order_by(ComplaintNote.created_at)
-        .all()
+    notes = list(
+        db.complaint_notes.find({"complaint_id": complaint_id})
+        .sort("created_at", 1)
     )
-    return {"notes": [n.to_dict() for n in notes]}
+    return {"notes": [ComplaintNoteDoc(n).to_dict() for n in notes]}

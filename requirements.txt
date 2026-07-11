@@ -9,8 +9,7 @@ pydantic-settings>=2.2.0
 python-multipart>=0.0.9
 
 # Database
-sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.0
+pymongo>=4.6.0
 
 # ML / NLP
 numpy<2

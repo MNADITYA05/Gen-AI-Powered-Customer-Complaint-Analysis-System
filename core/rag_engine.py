@@ -6,7 +6,7 @@ Local RAG (Retrieval-Augmented Generation) engine for similar case retrieval.
 Architecture:
   1. sentence-transformers  — embeds complaint text into dense vectors
   2. FAISS                  — fast approximate nearest-neighbour search
-  3. SQLAlchemy             — fetches full case details for returned IDs
+  3. MongoDB                — fetches full case details for returned IDs
 
 No external API is called.  Everything runs locally.
 
@@ -78,7 +78,7 @@ class RAGEngine:
     def load_or_build(self, db) -> None:
         """
         Try loading a persisted index from disk; rebuild from DB if absent.
-        `db` is a SQLAlchemy Session.
+        `db` is a pymongo.database.Database instance.
         """
         self._embedder = _sentence_transformers()(_EMBED_MODEL)
 
@@ -100,18 +100,19 @@ class RAGEngine:
         """
         Embed all complaints in the DB and rebuild the FAISS index.
         Returns the number of vectors indexed.
+        `db` is a pymongo.database.Database instance.
         """
-        from core.db_models import Complaint
-
         if self._embedder is None:
             self._embedder = _sentence_transformers()(_EMBED_MODEL)
 
-        rows = (
-            db.query(Complaint)
-            .filter(Complaint.complaint_text.isnot(None))
-            .order_by(Complaint.created_at.desc())
+        rows = list(
+            db.complaints.find(
+                {"complaint_text": {"$exists": True, "$ne": None}},
+                {"_id": 1, "complaint_text": 1, "category": 1,
+                 "severity": 1, "emotion": 1, "status": 1},
+            )
+            .sort("created_at", -1)
             .limit(10_000)   # cap to keep index fast
-            .all()
         )
 
         if not rows:
@@ -119,15 +120,15 @@ class RAGEngine:
             self.is_ready = False
             return 0
 
-        texts = [r.complaint_text[:512] for r in rows]
+        texts = [r["complaint_text"][:512] for r in rows]
         meta  = [
             {
-                "id":       r.id,
-                "category": r.category or "",
-                "severity": r.severity or "",
-                "emotion":  r.emotion  or "",
-                "status":   r.status   or "open",
-                "snippet":  r.complaint_text[:200],
+                "id":       r["_id"],
+                "category": r.get("category") or "",
+                "severity": r.get("severity") or "",
+                "emotion":  r.get("emotion")  or "",
+                "status":   r.get("status")   or "open",
+                "snippet":  r["complaint_text"][:200],
             }
             for r in rows
         ]

@@ -5,7 +5,6 @@ WORKDIR /app
 # System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # PyTorch CPU-only (much smaller than CUDA build — ~800MB vs 2.5GB)
@@ -30,8 +29,7 @@ RUN pip install --no-cache-dir \
     pydantic>=2.7.0 \
     pydantic-settings>=2.2.0 \
     python-multipart>=0.0.9 \
-    sqlalchemy>=2.0.0 \
-    psycopg2-binary>=2.9.0 \
+    pymongo>=4.6.0 \
     pandas>=2.2.0 \
     scikit-learn>=1.4.0 \
     joblib>=1.4.0 \

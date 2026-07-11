@@ -19,28 +19,25 @@ logger = logging.getLogger(__name__)
 # ── Initialise app dependencies ────────────────────────────────────────────────
 
 from core.settings import get_settings
-from core.database import create_tables, SessionLocal
+from core.database import ensure_indexes, get_db
 
 settings = get_settings()
 
 
 def _seed_admin() -> None:
     from core.auth import get_password_hash
-    from core.db_models import User
-    db = SessionLocal()
-    try:
-        if db.query(User).count() == 0:
-            admin = User(
-                username=settings.default_admin_username,
-                email="admin@localhost",
-                hashed_password=get_password_hash(settings.default_admin_password),
-                role="admin",
-            )
-            db.add(admin)
-            db.commit()
-            logger.info("Default admin created — username: '%s'", settings.default_admin_username)
-    finally:
-        db.close()
+    from core.db_models import new_user
+
+    db = get_db()
+    if db.users.count_documents({}) == 0:
+        admin = new_user(
+            username        = settings.default_admin_username,
+            email           = "admin@localhost",
+            hashed_password = get_password_hash(settings.default_admin_password),
+            role            = "admin",
+        )
+        db.users.insert_one(admin)
+        logger.info("Default admin created — username: '%s'", settings.default_admin_username)
 
 
 _GITHUB_RELEASE_BASE = (
@@ -58,7 +55,7 @@ def _download_model_weights() -> None:
         return
     model_dir.mkdir(parents=True, exist_ok=True)
     for filename in _MODEL_FILES:
-        url = f"{_GITHUB_RELEASE_BASE}/{filename}"
+        url  = f"{_GITHUB_RELEASE_BASE}/{filename}"
         dest = model_dir / filename
         logger.info("Downloading %s ...", filename)
         try:
@@ -79,18 +76,15 @@ def _init_rag() -> None:
     try:
         from core.rag_engine import get_rag_engine
         engine = get_rag_engine()
-        db = SessionLocal()
-        try:
-            engine.load_or_build(db)
-        finally:
-            db.close()
+        db = get_db()
+        engine.load_or_build(db)
     except Exception as exc:
         import traceback
         logger.warning("RAG init skipped: %s\n%s", exc, traceback.format_exc())
 
 
 # Run startup sequence
-create_tables()
+ensure_indexes()
 _seed_admin()
 _download_model_weights()
 _init_rag()

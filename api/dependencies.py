@@ -9,13 +9,12 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
 
 from core.analysis.classifier import ComplaintClassifier
 from core.analysis.multi_task_model import MultiTaskClassifier
 from core.auth import decode_token
 from core.database import get_db
-from core.db_models import User
+from core.db_models import UserDoc
 from core.settings import get_settings
 
 settings = get_settings()
@@ -45,9 +44,9 @@ _bearer = HTTPBearer(auto_error=False)
 
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    db: Session = Depends(get_db),
-) -> User:
-    """Decode the Bearer token and return the matching User row."""
+    db=Depends(get_db),
+) -> UserDoc:
+    """Decode the Bearer token and return the matching UserDoc."""
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -61,19 +60,19 @@ def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = db.query(User).filter(User.id == payload.get("sub")).first()
-    if not user or not user.is_active:
+    doc = db.users.find_one({"_id": payload.get("sub")})
+    if not doc or not doc.get("is_active", True):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+    return UserDoc(doc)
 
 
-def require_admin(current_user: User = Depends(get_current_user)) -> User:
+def require_admin(current_user: UserDoc = Depends(get_current_user)) -> UserDoc:
     """Require the caller to have the 'admin' role."""
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 
 
-def require_agent(current_user: User = Depends(get_current_user)) -> User:
+def require_agent(current_user: UserDoc = Depends(get_current_user)) -> UserDoc:
     """Require the caller to be logged in (any role)."""
     return current_user

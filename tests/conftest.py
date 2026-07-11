@@ -1,53 +1,43 @@
 """
 Shared pytest fixtures.
-Uses an in-memory SQLite database so tests never touch the dev database.
+Uses mongomock for an in-memory MongoDB so tests never touch a real database.
 
 Key design decisions:
-- StaticPool forces SQLite :memory: to reuse a single connection across all
-  sessions, so tables created in one session are visible in another.
-- env vars are set BEFORE any project imports so lru_cache settings pick them up.
+- mongomock provides a drop-in MongoClient replacement with no network calls
+- env vars are set BEFORE any project imports so lru_cache settings pick them up
 """
 import os
 
 # Must be set before any project module is imported (lru_cache on settings)
-os.environ["DATABASE_URL"]          = "sqlite:///:memory:"
+os.environ["MONGODB_URL"]           = "mongodb://localhost:27017"  # overridden by mock
+os.environ["MONGODB_DB_NAME"]       = "test_complaint_analysis"
 os.environ["MODEL_DIR"]             = "/tmp/test_models"
 os.environ["MLFLOW_TRACKING_URI"]   = "sqlite:////tmp/test_mlruns.db"
 
 import pandas as pd
 import pytest
+
+try:
+    import mongomock
+    _MOCK_CLIENT = mongomock.MongoClient()
+except ImportError:
+    _MOCK_CLIENT = None  # type: ignore[assignment]
+
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api.main import app
-from core import db_models  # noqa: F401 — registers ORM models with Base
-from core.database import Base, get_db
-
-# ── Single shared in-memory DB (StaticPool = same connection always) ──────────
-_test_engine = create_engine(
-    "sqlite:///:memory:",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,           # ← ensures :memory: isn't re-created per session
-)
-_TestSession = sessionmaker(bind=_test_engine, autocommit=False, autoflush=False)
-
-# Create tables once at import time — StaticPool keeps them alive for the session
-Base.metadata.create_all(bind=_test_engine)
+from core.database import get_db
 
 
-def _override_get_db():
-    db = _TestSession()
-    try:
-        yield db
-    finally:
-        db.close()
+def _mock_get_db():
+    if _MOCK_CLIENT is None:
+        pytest.skip("mongomock not installed — run: pip install mongomock")
+    return _MOCK_CLIENT["test_complaint_analysis"]
 
 
 @pytest.fixture
 def client():
-    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_db] = _mock_get_db
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c
     app.dependency_overrides.clear()

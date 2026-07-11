@@ -1,126 +1,175 @@
 """
-SQLAlchemy ORM models.
+MongoDB document factories and lightweight wrapper classes.
 
-User         — application users (admin / agent roles)
-Complaint    — every real or synthetic complaint
-ComplaintNote — agent notes attached to a complaint
-ModelRun     — records each training run with metrics
+Replaces the previous SQLAlchemy ORM models.
+
+Usage:
+    # Create a new document dict to insert:
+    doc = new_user(username="alice", email="a@b.com", hashed_password="...")
+    db.users.insert_one(doc)
+
+    # Wrap a retrieved dict for attribute-style access:
+    user = UserDoc(db.users.find_one({"username": "alice"}))
+    print(user.role)          # "agent"
+    print(user.to_dict())     # safe dict (no hashed_password)
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any, Optional
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    JSON,
-    String,
-    Text,
-)
 
-from core.database import Base
-
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-# ── User ──────────────────────────────────────────────────────────────────────
+def _now() -> datetime:
+    return datetime.utcnow()
 
-class User(Base):
-    __tablename__ = "users"
 
-    id              = Column(String, primary_key=True, default=_uuid)
-    username        = Column(String(64), unique=True, nullable=False, index=True)
-    email           = Column(String(128), unique=True, nullable=False)
-    hashed_password = Column(String(256), nullable=False)
-    role            = Column(String(16), nullable=False, default="agent")  # admin | agent
-    is_active       = Column(Boolean, default=True)
-    created_at      = Column(DateTime, default=datetime.utcnow)
+# ── Document factories ────────────────────────────────────────────────────────
+
+def new_user(
+    username: str,
+    email: str,
+    hashed_password: str,
+    role: str = "agent",
+) -> dict:
+    return {
+        "_id":             _uuid(),
+        "username":        username,
+        "email":           email,
+        "hashed_password": hashed_password,
+        "role":            role,
+        "is_active":       True,
+        "created_at":      _now(),
+    }
+
+
+def new_complaint(
+    complaint_text: str,
+    category: str,
+    severity: str,
+    emotion: str,
+    source: str = "api",
+    status: str = "open",
+    **kwargs: Any,
+) -> dict:
+    return {
+        "_id":             _uuid(),
+        "complaint_text":  complaint_text,
+        "category":        category,
+        "severity":        severity,
+        "emotion":         emotion,
+        "source":          source,
+        "status":          status,
+        "created_at":      _now(),
+        "updated_at":      _now(),
+        **kwargs,
+    }
+
+
+def new_complaint_note(complaint_id: str, user_id: str, content: str) -> dict:
+    return {
+        "_id":          _uuid(),
+        "complaint_id": complaint_id,
+        "user_id":      user_id,
+        "content":      content,
+        "created_at":   _now(),
+    }
+
+
+def new_model_run(
+    category_accuracy: float,
+    emotion_accuracy: float,
+    severity_accuracy: float,
+    training_samples: int,
+    is_active: bool = True,
+    mlflow_run_id: Optional[str] = None,
+    parameters: Optional[dict] = None,
+) -> dict:
+    return {
+        "_id":               _uuid(),
+        "category_accuracy": category_accuracy,
+        "emotion_accuracy":  emotion_accuracy,
+        "severity_accuracy": severity_accuracy,
+        "training_samples":  training_samples,
+        "mlflow_run_id":     mlflow_run_id,
+        "parameters":        parameters or {},
+        "is_active":         is_active,
+        "created_at":        _now(),
+    }
+
+
+# ── Wrapper classes ───────────────────────────────────────────────────────────
+
+class _DocWrapper:
+    """
+    Wraps a raw MongoDB document dict, providing attribute-style field access
+    and a safe to_dict() serialiser.
+    """
+
+    def __init__(self, doc: dict) -> None:
+        # Store the raw document in __dict__ directly to avoid __getattr__ recursion.
+        object.__setattr__(self, "_doc", doc)
+
+    # Attribute access — delegates to the underlying document
+    def __getattr__(self, name: str) -> Any:
+        doc = object.__getattribute__(self, "_doc")
+        try:
+            return doc[name]
+        except KeyError:
+            raise AttributeError(f"{type(self).__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        doc = object.__getattribute__(self, "_doc")
+        doc[name] = value
+
+    # Convenience: id → _id alias
+    @property
+    def id(self) -> str:
+        return object.__getattribute__(self, "_doc")["_id"]
 
     def to_dict(self) -> dict:
-        d = {c.name: getattr(self, c.name) for c in self.__table__.columns}
-        d.pop("hashed_password", None)  # never expose the hash
+        doc = object.__getattribute__(self, "_doc")
+        d = dict(doc)
+        d["id"] = d.pop("_id")
+        d.pop("hashed_password", None)
         return d
 
 
-# ── Complaint ─────────────────────────────────────────────────────────────────
+class UserDoc(_DocWrapper):
+    """Wraps a users collection document."""
 
-class Complaint(Base):
-    __tablename__ = "complaints"
 
-    id             = Column(String, primary_key=True, default=_uuid)
-    complaint_text = Column(Text, nullable=False)
-    category       = Column(String(64), nullable=False, index=True)
-    specific_issue = Column(String(128))
-    severity       = Column(String(32), nullable=False, index=True)
-    emotion        = Column(String(64), nullable=False)
-
-    # Case management
-    status            = Column(String(32), default="open", index=True)   # open | in_progress | resolved | closed
-    source            = Column(String(32), default="synthetic")           # web_form | csv_upload | synthetic | api
-    assignee_id       = Column(String, ForeignKey("users.id"), nullable=True)
-    resolution_notes  = Column(Text, nullable=True)
-
-    # Demographics
-    age_group          = Column(String(16))
-    tech_savviness     = Column(String(16))
-    banking_experience = Column(String(32))
-
-    # Metadata
-    channel               = Column(String(32))
-    account_type          = Column(String(32))
-    resolution_time_hours = Column(Integer)
-    location              = Column(String(128))
-    customer_id           = Column(String(64))
-    customer_name         = Column(String(128))
-
-    # Stats
-    word_count        = Column(Integer)
-    character_count   = Column(Integer)
-    generation_method = Column(String(64), default="template")
-
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+class ComplaintDoc(_DocWrapper):
+    """Wraps a complaints collection document."""
 
     def to_dict(self) -> dict:
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        doc = object.__getattribute__(self, "_doc")
+        d = dict(doc)
+        d["id"] = d.pop("_id")
+        return d
 
 
-# ── ComplaintNote ─────────────────────────────────────────────────────────────
-
-class ComplaintNote(Base):
-    __tablename__ = "complaint_notes"
-
-    id           = Column(String, primary_key=True, default=_uuid)
-    complaint_id = Column(String, ForeignKey("complaints.id"), nullable=False, index=True)
-    user_id      = Column(String, ForeignKey("users.id"), nullable=False)
-    content      = Column(Text, nullable=False)
-    created_at   = Column(DateTime, default=datetime.utcnow)
+class ComplaintNoteDoc(_DocWrapper):
+    """Wraps a complaint_notes collection document."""
 
     def to_dict(self) -> dict:
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        doc = object.__getattribute__(self, "_doc")
+        d = dict(doc)
+        d["id"] = d.pop("_id")
+        return d
 
 
-# ── ModelRun ──────────────────────────────────────────────────────────────────
-
-class ModelRun(Base):
-    __tablename__ = "model_runs"
-
-    id                = Column(String, primary_key=True, default=_uuid)
-    category_accuracy = Column(Float)
-    emotion_accuracy  = Column(Float)
-    severity_accuracy = Column(Float)
-    training_samples  = Column(Integer)
-    mlflow_run_id     = Column(String(64))
-    parameters        = Column(JSON)
-    is_active         = Column(Boolean, default=False)
-    created_at        = Column(DateTime, default=datetime.utcnow)
+class ModelRunDoc(_DocWrapper):
+    """Wraps a model_runs collection document."""
 
     def to_dict(self) -> dict:
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        doc = object.__getattribute__(self, "_doc")
+        d = dict(doc)
+        d["id"] = d.pop("_id")
+        return d

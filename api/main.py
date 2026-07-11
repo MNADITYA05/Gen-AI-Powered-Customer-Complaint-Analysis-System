@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers import complaints, health, models
 from api.routers import auth as auth_router
-from core.database import create_tables, SessionLocal
+from core.database import ensure_indexes, get_db
 from core.settings import get_settings
 
 logging.basicConfig(
@@ -26,27 +26,18 @@ settings = get_settings()
 def _seed_admin() -> None:
     """Create a default admin account if no users exist yet."""
     from core.auth import get_password_hash
-    from core.db_models import User
+    from core.db_models import new_user
 
-    db = SessionLocal()
-    try:
-        if db.query(User).count() == 0:
-            admin = User(
-                username=settings.default_admin_username,
-                email="admin@localhost",
-                hashed_password=get_password_hash(settings.default_admin_password),
-                role="admin",
-            )
-            db.add(admin)
-            db.commit()
-            logger.info(
-                "Default admin created — username: '%s'  password: '%s'  "
-                "(change this immediately in production!)",
-                settings.default_admin_username,
-                settings.default_admin_password,
-            )
-    finally:
-        db.close()
+    db = get_db()
+    if db.users.count_documents({}) == 0:
+        admin = new_user(
+            username       = settings.default_admin_username,
+            email          = "admin@localhost",
+            hashed_password = get_password_hash(settings.default_admin_password),
+            role           = "admin",
+        )
+        db.users.insert_one(admin)
+        logger.info("Default admin created — username: '%s'", settings.default_admin_username)
 
 
 _GITHUB_RELEASE_BASE = (
@@ -70,7 +61,7 @@ def _download_model_weights() -> None:
 
     model_dir.mkdir(parents=True, exist_ok=True)
     for filename in _MODEL_FILES:
-        url = f"{_GITHUB_RELEASE_BASE}/{filename}"
+        url  = f"{_GITHUB_RELEASE_BASE}/{filename}"
         dest = model_dir / filename
         logger.info("Downloading %s ...", filename)
         try:
@@ -88,15 +79,12 @@ def _download_model_weights() -> None:
 
 
 def _init_rag() -> None:
-    """Build or load the RAG similarity index in the background."""
+    """Build or load the RAG similarity index."""
     try:
         from core.rag_engine import get_rag_engine
         engine = get_rag_engine()
-        db = SessionLocal()
-        try:
-            engine.load_or_build(db)
-        finally:
-            db.close()
+        db = get_db()
+        engine.load_or_build(db)
     except Exception as exc:
         import traceback
         logger.warning("RAG index init skipped: %s\n%s", exc, traceback.format_exc())
@@ -104,9 +92,9 @@ def _init_rag() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_tables()            # idempotent — creates any missing tables
+    ensure_indexes()           # create MongoDB indexes (idempotent)
     _seed_admin()              # no-op if users already exist
-    _download_model_weights()  # download from HF Hub if not present locally
+    _download_model_weights()  # download from GitHub Releases if not present locally
     _init_rag()                # load or build the FAISS similarity index
     yield
 

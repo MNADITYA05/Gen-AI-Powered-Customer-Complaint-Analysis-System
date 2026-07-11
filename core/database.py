@@ -1,42 +1,58 @@
 """
-SQLAlchemy database engine and session factory.
-Uses SQLite by default (DATABASE_URL in .env).
-Swap to postgresql+psycopg2://... for production with zero code changes.
+MongoDB database layer.
+
+Replaces the previous SQLAlchemy setup.  All application code that needs the
+database should call get_db() to receive a pymongo.database.Database instance
+and operate on its collections directly.
+
+Collections used:
+    users            — application users
+    complaints       — customer complaint records
+    complaint_notes  — agent notes attached to complaints
+    model_runs       — training run history
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from __future__ import annotations
+
+import logging
+from functools import lru_cache
+
+from pymongo import DESCENDING, MongoClient
+from pymongo.database import Database
 
 from core.settings import get_settings
 
-settings = get_settings()
-
-_connect_args = (
-    {"check_same_thread": False} if "sqlite" in settings.database_url else {}
-)
-
-engine = create_engine(
-    settings.database_url,
-    connect_args=_connect_args,
-    echo=False,
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger = logging.getLogger(__name__)
 
 
-class Base(DeclarativeBase):
-    pass
+@lru_cache(maxsize=1)
+def _get_client() -> MongoClient:
+    """Return a cached MongoClient (connection-pooled singleton)."""
+    settings = get_settings()
+    return MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=10_000)
 
 
-def get_db():
-    """FastAPI dependency that yields a DB session and closes it on exit."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_db() -> Database:
+    """Return the application MongoDB database."""
+    settings = get_settings()
+    return _get_client()[settings.mongodb_db_name]
 
 
-def create_tables() -> None:
-    """Create all tables (idempotent). Call once on startup."""
-    from core import db_models  # noqa: F401 — registers models with Base
-    Base.metadata.create_all(bind=engine)
+def ensure_indexes() -> None:
+    """
+    Create all required indexes (idempotent — safe to call on every startup).
+    Equivalent to SQLAlchemy's create_tables().
+    """
+    db = get_db()
+
+    db.users.create_index("username", unique=True, background=True)
+    db.users.create_index("email",    unique=True, background=True)
+
+    db.complaints.create_index([("created_at", DESCENDING)], background=True)
+    db.complaints.create_index("category", background=True)
+    db.complaints.create_index("severity", background=True)
+    db.complaints.create_index("status",   background=True)
+
+    db.complaint_notes.create_index("complaint_id", background=True)
+    db.model_runs.create_index([("created_at", DESCENDING)], background=True)
+
+    logger.info("MongoDB indexes ensured.")
