@@ -1,7 +1,5 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
-# PyTorch CPU (avoids 2.5GB CUDA download)
-torch==2.1.0+cpu
+# PyTorch (CPU Basic Space — no CUDA needed)
+torch>=2.1.0
 
 # Core API
 fastapi>=0.111.0
