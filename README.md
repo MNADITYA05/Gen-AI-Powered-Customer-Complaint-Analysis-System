@@ -9,7 +9,7 @@
 ![Issues](https://img.shields.io/github/issues/MNADITYA05/Gen-AI-Powered-Customer-Complaint-Analysis-System?style=flat-square)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)
 
-> **One-liner:** An AI-powered banking complaint management system that simultaneously classifies category, severity, and customer emotion using a custom fine-tuned RoBERTa model achieving **92.10% average accuracy** — with semantic similarity search to surface related cases instantly.
+> **One-liner:** An AI-powered banking complaint management system that simultaneously classifies category, severity, and customer emotion using a custom fine-tuned RoBERTa model achieving **92.10%  of average accuracy** — with semantic similarity search to surface related cases instantly.
 
 ---
 
